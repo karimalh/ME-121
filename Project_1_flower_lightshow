@@ -8,60 +8,68 @@ led = Pin(22, Pin.OUT)
 led.value(1)  # Ensure LED starts ON
 
 # Initialize servos
-servo1 = Servo(0)  # Big arm
-servo2 = Servo(2)  # Small arm with LED
+servo1 = Servo(0)  # Big arm (X-axis)
+servo2 = Servo(2)  # Small arm with LED (Y-axis)
 
 # Function to move servos
-def move_servo(servo, angle, delay=0.02):
+def move_servo(servo, angle, delay=0.05):
     """
     Move a servo to a specific angle with a delay.
     :param servo: Servo object to move
-    :param angle: Target angle
+    :param angle: Target angle (in degrees)
     :param delay: Time to wait after moving the servo
     """
-    servo.write(int(angle))  # Ensure the angle is an integer
+    servo.write(int(angle))
     time.sleep(delay)
 
-# Circle pattern function with timer
-def circle_pattern(radius=45, steps=100):
+# Function to generate a smoother, curvier flower pattern
+def generate_smooth_flower(radius=45, petals=6, steps=200):
     """
-    Create a circular light show pattern.
-    - Radius determines the range of servo movement.
-    - Steps determine the smoothness of the circle.
+    Generate points for a flower pattern using a modified rose curve.
+    - radius: Determines the size of the flower.
+    - petals: Number of petals in the flower.
+    - steps: Number of points for smoothness.
     """
-    print("Starting the circle pattern...")
-    
-    # Start the timer
-    start_time = time.time()
-    
-    # Draw the circle
-    for step in range(steps):
-        # Calculate the angle for the current step
-        angle = (step / steps) * 2 * math.pi  # Convert step to radians
+    flower_points = []
+    for i in range(steps + 1):
+        theta = (i / steps) * 2 * math.pi  # Full circle
         
-        # Calculate servo angles to approximate a circle
-        big_arm_angle = radius * math.cos(angle)  # X-coordinate (servo1)
-        small_arm_angle = radius * math.sin(angle)  # Y-coordinate (servo2)
-        
-        # Clamp angles to the servo range (-90 to 90)
-        big_arm_angle = max(-90, min(90, big_arm_angle))
-        small_arm_angle = max(-90, min(90, small_arm_angle))
-        
-        # Move servos to the calculated angles
-        move_servo(servo1, big_arm_angle)
-        move_servo(servo2, small_arm_angle)
+        # Modified equation for curvier petals
+        r = radius * (1 + 0.3 * math.sin(petals * theta))  # Adding a sine perturbation
+        x = r * math.cos(theta)
+        y = r * math.sin(theta)
 
-    # Stop the timer
-    end_time = time.time()
-    
-    # Calculate the elapsed time
-    elapsed_time = end_time - start_time
-    print(f"Circle pattern completed in {elapsed_time:.2f} seconds.")
-    
-    # Return arms to the starting position
-    move_servo(servo1, 0)
-    move_servo(servo2, 0)
+        flower_points.append((x, y))
+    return flower_points
 
-# Run the circle pattern
-circle_pattern()
+# Function to move servos through generated coordinates
+def draw_pattern(points, delay=0.1):
+    for x, y in points:
+        move_servo(servo1, x)
+        move_servo(servo2, y)
+        time.sleep(delay)
 
+# Define branch coordinates (a straight line going up)
+branch_points = [
+    (0, -90),  # Start at bottom
+    (0, -70),
+    (0, -50),
+    (0, -30),
+    (0, -10),
+    (0, 0),    # Connects to flower center
+]
+
+# Generate the smooth flower points
+flower_points = generate_smooth_flower(radius=20, petals=8, steps=50)
+
+# Combine branch and flower
+full_pattern = branch_points + flower_points
+
+# Run the combined pattern
+draw_pattern(full_pattern, delay=0.05)
+
+# Return to starting position
+move_servo(servo1, 0)
+move_servo(servo2, 0)
+
+print("Smooth flower with branch drawing completed.")
