@@ -1,0 +1,67 @@
+from servo import Servo
+from machine import Pin
+import time
+import math
+
+# Initialize LED on pin D4 and set it to ON
+led = Pin(22, Pin.OUT)
+led.value(1)  # Ensure LED starts ON
+
+# Initialize servos
+servo1 = Servo(0)  # Big arm
+servo2 = Servo(2)  # Small arm with LED
+
+# Function to move servos
+def move_servo(servo, angle, delay=0.02):
+    """
+    Move a servo to a specific angle with a delay.
+    :param servo: Servo object to move
+    :param angle: Target angle
+    :param delay: Time to wait after moving the servo
+    """
+    servo.write(int(angle))  # Ensure the angle is an integer
+    time.sleep(delay)
+
+# Circle pattern function with timer
+def circle_pattern(radius=45, steps=100):
+    """
+    Create a circular light show pattern.
+    - Radius determines the range of servo movement.
+    - Steps determine the smoothness of the circle.
+    """
+    print("Starting the circle pattern...")
+    
+    # Start the timer
+    start_time = time.time()
+    
+    # Draw the circle
+    for step in range(steps):
+        # Calculate the angle for the current step
+        angle = (step / steps) * 2 * math.pi  # Convert step to radians
+        
+        # Calculate servo angles to approximate a circle
+        big_arm_angle = radius * math.cos(angle)  # X-coordinate (servo1)
+        small_arm_angle = radius * math.sin(angle)  # Y-coordinate (servo2)
+        
+        # Clamp angles to the servo range (-90 to 90)
+        big_arm_angle = max(-90, min(90, big_arm_angle))
+        small_arm_angle = max(-90, min(90, small_arm_angle))
+        
+        # Move servos to the calculated angles
+        move_servo(servo1, big_arm_angle)
+        move_servo(servo2, small_arm_angle)
+
+    # Stop the timer
+    end_time = time.time()
+    
+    # Calculate the elapsed time
+    elapsed_time = end_time - start_time
+    print(f"Circle pattern completed in {elapsed_time:.2f} seconds.")
+    
+    # Return arms to the starting position
+    move_servo(servo1, 0)
+    move_servo(servo2, 0)
+
+# Run the circle pattern
+circle_pattern()
+
