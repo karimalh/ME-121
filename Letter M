@@ -1,0 +1,202 @@
+from servo import Servo
+from machine import Pin
+import time
+import math
+
+# Initialize servos
+servo1 = Servo(0)  # Big arm (X-axis)
+servo2 = Servo(2)  # Small arm with LED (Y-axis)
+
+led = Pin(22, Pin.OUT)
+led.value(1)  # Ensure LED starts ON
+
+motor_arm = 7.75 #cm  
+lego_arm =  8.5 #cm
+start_time = time.time()
+#-180 is left (outside)
+def inverse_kinematics(x1, y1, L_1, L_2):
+    if math.sqrt(x1**2 + y1**2) > (L_1 + L_2):
+        return None, None #target unreachable
+    
+    #calculating q2
+    cos_q2 = (x1**2 + y1**2 - L_1**2 - L_2**2)/(2*L_1*L_2)
+    inverse_cos = math.acos(cos_q2)
+    q_2 = inverse_cos
+    #print(q_2)
+    
+    #calculating q1:
+    inverse_tan_xy = math.atan2(y1,x1)
+    inverse_tan_all = math.atan2((L_2*math.sin(q_2)),(L_1 + L_2*math.cos(q_2)))
+    q_1 = inverse_tan_xy - inverse_tan_all
+    q_1 = math.degrees(q_1)
+    q_2 = math.degrees(q_2)
+    q_1 = q_1 - 90
+    return q_1, q_2
+
+
+
+# Given coordinates
+# coordinates = [
+#     (-16.25, 0),
+#     (-5.97, 15.1),
+#     (0, 11.5),
+#     (5.97, 15.1),
+#     (16.25, 0)
+# ]
+def return_to_original_position(origin_x, origin_y):
+    """
+    Moves the servos to the original position (first point of M_coordinates) 
+    and turns off the LED before moving.
+
+    :param original_point: Tuple of (x, y) coordinates for the original position
+    """
+    print("Returning to original position...")
+
+    # Convert the original position to servo angles
+    q1, q2 = inverse_kinematics(origin_x,origin_y , motor_arm, lego_arm)
+
+    if q1 is not None and q2 is not None:
+        led.value(0)  # Turn off LED before moving
+        servo1.write(q1)
+        servo2.write(q2)
+        
+def generate_line_points(x_start, x_end, y_start, y_end, num_points):
+    """
+    Generate a specified number of points from a line segment.
+    :param x_start: Starting x value
+    :param x_end: Ending x value
+    :param y_start: Starting y value
+    :param y_end: Ending y value
+    :param num_points: Number of points to generate
+    :return: List of (x, y) coordinate tuples
+    """
+    x_values = [x_start + (x_end - x_start) * (i / (num_points - 1)) for i in range(num_points)]
+    y_values = [y_start + (y_end - y_start) * (i / (num_points - 1)) for i in range(num_points)]
+    return list(zip(x_values, y_values))
+
+def move_servo_along_segments(servo1, servo2, segments, num_points=10, delay=0.5):
+    """
+    Move servos gradually along multiple line segments using inverse kinematics.
+    
+    :param servo1: Servo object for the first link
+    :param servo2: Servo object for the second link
+    :param segments: List of tuples containing (x_start, x_end, y_start, y_end)
+    :param num_points: Number of intermediate points per segment
+    :param delay: Delay between movements
+    """
+    blink = 0
+    for x_start, x_end, y_start, y_end in segments:
+        # Generate line points
+        line_points = generate_line_points(x_start, x_end, y_start, y_end, num_points)
+        
+        
+        for x, y in line_points:
+            q1, q2 = inverse_kinematics(x, y, motor_arm, lego_arm)
+            if q1 is not None and q2 is not None:
+                led.value(0)
+                servo1.write(int(q1))
+                servo2.write(int(q2))
+                time.sleep(blink)
+                led.value(1)
+                time.sleep(delay)
+            
+
+# Define line segments (x_start, x_end, y_start, y_end)
+line_segments = [
+    (-13.22,-5.83,4.31,15.16),
+    (-5.83, 0, 15.16, 12.39),
+    (0,5.83, 12.39, 15.16),
+    (5.83, 13.22, 15.16, 4.314)
+#     (-16.25, -5.97, 0, 15.1),   # Line 1
+#      (-5.97, 0, 15.1, 11.5),     # Line 2
+#      (0, 5.97, 11.5, 15.1),      # Line 3
+#     (5.97, 16.25, 15.1, 0)      # Line 4
+]
+first_line = line_segments[0]
+
+# Execute movement through all line segments
+move_servo_along_segments(servo1, servo2, line_segments, num_points=30, delay=0.05)
+led.value(0)
+
+# Return to the first coordinate as original position
+# return_to_original_position(first_line[0],first_line[2])
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"Total execution time: {elapsed_time:.2f} seconds")
+
+#    
+#angles = []
+# for XY in M_coordinates:
+#     q1, q2 = inverse_kinematics(*XY, motor_arm, lego_arm)
+#     if q1 is not None and q2 is not None:
+#         angles.append((q1, q2))
+#     else:
+#         print(f"Target {XY} is unreachable")
+
+# def adjust_angle(angle):
+#     """
+#     Adjust the angle to fit within the servo range of -90 to 90.
+#     If the angle is greater than 90, convert it to a negative value.
+# 
+#     :param angle: Angle in degrees
+#     :return: Adjusted angle within -90 to 90 range
+#     """
+#     if angle > 90:
+#         return 90 - angle   # Convert angles above 90 to negative values
+#     return angle
+
+# # Adjust all calculated angles
+# adjusted_angles = [(adjust_angle(q1), adjust_angle(q2)) for q1, q2 in angles]
+# 
+# # Print adjusted angles
+# print("Adjusted angles (q1, q2) for servo range:")
+# for idx, (q1, q2) in enumerate(adjusted_angles):
+#     print(f"Point {idx + 1}: Servo1 Angle: {q1:.2f}, Servo2 Angle: {q2:.2f}")
+
+# print(adjusted_angles)
+#print (angles)
+
+# for q1, q2 in angles:
+#     move_servo(servo1, q1)
+#     move_servo(servo2, q2)
+    
+# def generate_points_between_coordinates(points, num_points_per_segment):
+#     """
+#     Generate a specified number of points along multiple line segments.
+# 
+#     :param points: List of tuples representing coordinates (x, y)
+#     :param num_points_per_segment: Number of points to generate per segment
+#     :return: List of (x, y) coordinate tuples
+#     """
+#     segment_points = []
+# 
+#     for i in range(len(points) - 1):
+#         # Get start and end points
+#         x1, y1 = points[i]
+#         x2, y2 = points[i + 1]
+# 
+#         # Calculate slope and intercept
+#         a = (y2 - y1) / (x2 - x1)
+#         b = y1 - a * x1
+# 
+#         # Generate equally spaced x values
+#         x_values = [x1 + j * (x2 - x1) / (num_points_per_segment - 1) for j in range(num_points_per_segment)]
+#         
+#         # Compute y values for each x using the line equation
+#         segment = [(x, a * x + b) for x in x_values]
+#         segment_points.extend(segment)
+# 
+#     return segment_points
+
+# def move_servo(servo, angle, delay=0.5):
+#     """
+#     Move a servo to a specific angle with a delay.
+#     :param servo: Servo object to move
+#     :param angle: Target angle (in degrees)
+#     :param delay: Time to wait after moving the servo
+#     """
+#     servo.write(int(angle))
+#     time.sleep(delay)
+
+
