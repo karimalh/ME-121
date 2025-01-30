@@ -1,0 +1,283 @@
+from servo import Servo
+from machine import Pin
+import time
+import math
+
+# Initialize servos
+servo1 = Servo(0)  # Big arm (X-axis)
+servo2 = Servo(2)  # Small arm with LED (Y-axis)
+
+led = Pin(22, Pin.OUT)
+led.value(1)  # Ensure LED starts ON
+
+motor_arm = 7.75 #cm  
+lego_arm =  8.5 #cm
+start_time = time.time()
+#-180 is left (outside)
+def inverse_kinematics(x1, y1, L_1, L_2):
+    if math.sqrt(x1**2 + y1**2) > (L_1 + L_2):
+        return None, None #target unreachable
+    
+    #calculating q2
+    cos_q2 = (x1**2 + y1**2 - L_1**2 - L_2**2)/(2*L_1*L_2)
+    inverse_cos = math.acos(cos_q2)
+    q_2 = inverse_cos
+    #print(q_2)
+    
+    #calculating q1:
+    inverse_tan_xy = math.atan2(y1,x1)
+    inverse_tan_all = math.atan2((L_2*math.sin(q_2)),(L_1 + L_2*math.cos(q_2)))
+    q_1 = inverse_tan_xy - inverse_tan_all
+    q_1 = math.degrees(q_1)
+    q_2 = math.degrees(q_2)
+    q_1 = q_1 - 90
+    return q_1, q_2
+
+def move_to_position(x, y, servo1, servo2, motor_arm, lego_arm, led):
+    """
+    Move servos to a specific position without drawing (LED remains off).
+
+    :param x: Target x-coordinate
+    :param y: Target y-coordinate
+    :param servo1: Servo object for the first link
+    :param servo2: Servo object for the second link
+    :param motor_arm: Length of the motor arm
+    :param lego_arm: Length of the lego arm
+    :param led: LED object to control drawing state
+    """
+    q1, q2 = inverse_kinematics(x, y, motor_arm, lego_arm)
+    if q1 is not None and q2 is not None:
+        led.value(0)  # Ensure LED is off
+        servo1.write(int(q1))
+        servo2.write(int(q2))
+        time.sleep(0.5)  # Wait briefly for the movement to complete
+
+
+# Given coordinates
+# coordinates = [
+#     (-16.25, 0),
+#     (-5.97, 15.1),
+#     (0, 11.5),
+#     (5.97, 15.1),
+#     (16.25, 0)
+# ]
+def return_to_original_position(origin_x, origin_y):
+    """
+    Moves the servos to the original position (first point of M_coordinates) 
+    and turns off the LED before moving.
+
+    :param original_point: Tuple of (x, y) coordinates for the original position
+    """
+    print("Returning to original position...")
+
+    # Convert the original position to servo angles
+    q1, q2 = inverse_kinematics(origin_x,origin_y , motor_arm, lego_arm)
+
+    if q1 is not None and q2 is not None:
+        led.value(0)  # Turn off LED before moving
+        servo1.write(q1)
+        servo2.write(q2)
+        
+
+def generate_curve_points_ordered(point1, point2, point3, num_points):
+    """
+    Generate a specified number of points on a quadratic curve that passes through three given points,
+    ensuring the points are stored in order starting from the first point.
+
+    :param point1: Tuple (x1, y1)
+    :param point2: Tuple (x2, y2)
+    :param point3: Tuple (x3, y3)
+    :param num_points: Total number of points to generate across the curve
+    :return: List of (x, y) coordinate tuples in the specified order
+    """
+    x1, y1 = point1
+    x2, y2 = point2
+    x3, y3 = point3
+
+    # Solve for the coefficients of the quadratic equation ax^2 + bx + c = y
+    def solve_quadratic_coefficients(x1, y1, x2, y2, x3, y3):
+        denominator = (x1 - x2) * (x1 - x3) * (x2 - x3)
+        
+        a = (y1 * (x2 - x3) + y2 * (x3 - x1) + y3 * (x1 - x2)) / denominator
+        b = (y1 * (x3**2 - x2**2) + y2 * (x1**2 - x3**2) + y3 * (x2**2 - x1**2)) / denominator
+        c = (y1 * (x2 * x3 * (x2 - x3)) + y2 * (x3 * x1 * (x3 - x1)) + y3 * (x1 * x2 * (x1 - x2))) / denominator
+
+        return a, b, c
+
+    # Calculate the coefficients
+    a, b, c = solve_quadratic_coefficients(x1, y1, x2, y2, x3, y3)
+
+    # Split the curve generation into two segments
+    num_points_segment1 = num_points // 2  # Points between point1 and point2
+    num_points_segment2 = num_points - num_points_segment1  # Points between point2 and point3
+
+    # Generate x values for the first segment (between point1 and point2)
+    x_values_segment1 = [
+        x1 + (x2 - x1) * (i / (num_points_segment1 - 1)) for i in range(num_points_segment1)
+    ]
+    y_values_segment1 = [a * x**2 + b * x + c for x in x_values_segment1]
+
+    # Generate x values for the second segment (between point2 and point3)
+    x_values_segment2 = [
+        x2 + (x3 - x2) * (i / (num_points_segment2 - 1)) for i in range(num_points_segment2)
+    ]
+    y_values_segment2 = [a * x**2 + b * x + c for x in x_values_segment2]
+
+    # Combine all points in order
+    points_segment1 = list(zip(x_values_segment1, y_values_segment1))
+    points_segment2 = list(zip(x_values_segment2, y_values_segment2))
+
+    return points_segment1 + points_segment2
+
+def move_servo_along_path(servo1, servo2, path_points, num_points=10, delay=0.5):
+    """
+    Move servos gradually along a progressive path using inverse kinematics.
+
+    :param servo1: Servo object for the first link
+    :param servo2: Servo object for the second link
+    :param path_points: List of tuples containing (x, y) coordinates in sequence
+    :param num_points: Number of intermediate points per segment
+    :param delay: Delay between movements
+    """
+    blink = 0
+
+    # Ensure the sequence moves forward without repeating segments
+    for i in range(0, len(path_points) - 2, 2):  # Increment by 2 to avoid overlap
+        # Unpack the three points as tuples
+        point1 = path_points[i]
+        point2 = path_points[i + 1]
+        point3 = path_points[i + 2]
+
+        # Generate curve points for the current segment
+        curve_points = generate_curve_points_ordered(point1, point2, point3, num_points)
+        
+        for x, y in curve_points:  # Ensure each curve point is unpacked correctly
+            q1, q2 = inverse_kinematics(x, y, motor_arm, lego_arm)
+            if q1 is not None and q2 is not None:
+                led.value(0)  # Turn off LED before moving
+                servo1.write(int(q1))
+                servo2.write(int(q2))
+                time.sleep(blink)
+                led.value(1)  # Turn on LED after moving
+                time.sleep(delay)
+        
+
+# Define line segments (x_start, x_end, y_start, y_end)
+
+path_points = [
+#     (-11.7,7.36),
+#     (-12.12, 8.77),
+#     (-11.82, 9.77),
+#     (-10.56, 10.99),
+#     (-9.50,11.34),
+#     (-8.72, 11.45),
+#     (-8.05, 11.75),
+#     (-8.28, 12.79),
+#     (-7.41,14.05),
+#     (-6.84, 12.82),
+#     (-5.39, 11.58),
+#     (-6.47, 11.46),
+#     (-7.40, 11.30),
+#     (-7.56, 10.72),
+#     (-7.68, 10.33),
+#     (-9.81,7.83)
+    #
+    (-4.64,12.91),
+    (-3.77, 14.51),
+    (-2.44,15.32),
+    (-0.63,15.35),
+    (1.19, 14.57),
+    (2.28, 13.80),
+    (2.91, 13.49),
+    (3.40, 14.45),
+    (4.09, 14.99),
+    (4.33, 15.09),
+    (4.63, 15.16),
+    (4.93, 15.197),
+    (5.05, 15.16),
+    (5.8, 15.12),
+    (5.43, 14.349),
+    (5.19, 13.51),
+    (5.10, 12.39),
+    (5.2, 11.47),
+    (5.38, 10.87),
+    (4.64, 11.27),
+    (3.98, 12.1),
+    (3.15,12.53),
+    (2.61, 12.21),
+    (1.65, 11.78),
+    (0.62,11.70),
+    (-0.82, 11.58),
+    (-2.43, 11.50),
+    (-3.66,11.81),
+    (-4.47,12.50),
+    (-4.64,12.91)
+    
+]
+
+firstline = path_points[0]
+path_points_2 = [
+    (-1.95, 15.3),
+    (-1.62, 14.17),
+    (-1.53, 12.95),
+    (-1.74, 11.97),
+    (-1.95, 11.53), ] 
+
+# Execute movement through all line segments
+move_servo_along_path(servo1, servo2, path_points, num_points=30 , delay=0.05)
+led.value(0)
+# Move to the starting position of the second path (eyes/head) without drawing
+first_point_2 = (-3.14, 13.29)  # First point of the second path
+
+first_point_3 = path_points_2[0]
+move_to_position(first_point_2[0], first_point_2[1], servo1, servo2, motor_arm, lego_arm, led)
+led.value(1)
+time.sleep(0.5)
+led.value(0)
+
+move_to_position(first_point_3[0], first_point_3[1], servo1, servo2, motor_arm, lego_arm, led)
+led.value(1)
+time.sleep(0.5)
+move_servo_along_path(servo1, servo2, path_points_2, num_points=30, delay=0.05)
+led.value(0)
+# Return to the first coordinate as original position
+return_to_original_position(first_line[0],first_line[2])
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"Total execution time: {elapsed_time:.2f} seconds")
+
+"""
+def generate_curve_points(x1, y1, x2, y2, x3, y3, num_points):
+    Generate a specified number of points on a quadratic curve that passes through three given points.
+    
+#     :param x1, y1: First point coordinates
+#     :param x2, y2: Second point coordinates
+#     :param x3, y3: Third point coordinates
+#     :param num_points: Number of points to generate
+#     :return: List of (x, y) coordinate tuples
+
+    # Define the known x and y values
+    x_values = np.array([x1, x2, x3])
+    y_values = np.array([y1, y2, y3])
+    
+    # Fit a quadratic polynomial (degree 2) to the points
+    coefficients = np.polyfit(x_values, y_values, 2)
+
+    # Generate x values within the given range
+    x_min, x_max = min(x1, x2, x3), max(x1, x2, x3)
+    x_points = np.linspace(x_min, x_max, num_points)
+    
+    # Compute corresponding y values using the quadratic equation
+    y_points = np.polyval(coefficients, x_points)
+    
+    return list(zip(x_points, y_points))
+
+# Example usage
+points_on_curve = generate_curve_points(1, 2, 3, 4, 5, 3, 50)
+print(points_on_curve)
+
+"""
+
+
+
