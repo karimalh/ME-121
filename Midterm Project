@@ -1,0 +1,156 @@
+from machine import Pin
+from servo import Servo
+# from machine import I2C
+# import ssd1306
+import math
+from time import sleep
+import random
+
+# i2c = I2C(scl = Pin(23), sda = Pin(22))  # note you might get a warning here - you can ignore it
+# 
+# display = ssd1306.SSD1306_I2C(128, 64,i2c)
+
+
+s1 = Servo(0)  # Initialize servo on pin 0 (or another identifier for servo 1)
+s2 = Servo(1)
+s3 = Servo(2)
+
+# initial_A1, initial_A2, initial_A3 = 90, 0, -90
+
+def generate_equally_spaced_points(a, b, k):
+    if k < 2:
+        raise ValueError("k must be at least 2 to generate points with equal increments.")
+    
+    step = (b - a) / (k - 1)
+    return [a + i * step for i in range(k)]
+
+# Example usage
+a, b, k = 1, 10, 5  # Interval (1,10) and 5 points
+points = generate_equally_spaced_points(a, b, k)
+print(points)
+    
+def rotate(angle1,angle2,angle3):
+    s1.write(angle1)
+    s2.write(angle2)
+    s3.write(angle3)
+    
+def move_1_2_3(initial_angles, final_angles):
+    initial_A1, initial_A2, initial_A3 = initial_angles
+    target_A1, target_A2, target_A3 = final_angles
+    K = 50
+    values_A1 = generate_equally_spaced_points(initial_A1, target_A1, K)
+    values_A2 = generate_equally_spaced_points(initial_A2, target_A2, K)
+    values_A3 = generate_equally_spaced_points(initial_A3, target_A3, K)
+    if float(target_A1) != values_A1[-1]:
+        values_A1[-1] = target_A1
+    if float(target_A2) != values_A2[-1]:
+        values_A2[-1] = target_A2
+    if float(target_A3) != values_A3[-1]:
+        values_A3[-1] = target_A3
+    print(values_A1, values_A2, values_A3)
+    for i in range(K):
+        print(f"Rotating to {values_A1[i]} {values_A2[i]} {values_A3[i]}")
+        sleep(0.05)
+        rotate(values_A1[i], values_A2[i], values_A3[i])
+    return values_A1[-1], values_A2[-1], values_A3[-1]
+        
+
+def generate_triple():
+    a1, a2 = random.uniform(-90, 90), random.uniform(-90, 90)
+    return (a1, a2, -(a1 + a2))
+    
+
+def main(target_A1, target_A2, target_A3,initial_A1, initial_A2, initial_A3):
+    initial_angles = []
+    final_angles = []
+    initial_angles = initial_A1, initial_A2, initial_A3
+    final_angles = target_A1, target_A2, target_A3 
+#     initial_angles = (90, 0, -90)
+#     final_angles = (target_a1, target_a2, target_a3)
+    rotate(initial_A1, initial_A2, initial_A3)
+    sleep(2)
+    move_1_2_3(initial_angles, final_angles)
+#     # move_1_3(90, 0, -90, final_angles)
+    
+#     for _ in range(10):
+#         final_angles = generate_triple()
+#         print(f"final_angles: {final_angles}")
+#         sleep(1.5)
+#         initial_angles = move_1_2_3(initial_angles, final_angles)
+        
+        
+# Angle3: 0 -> 90
+
+# Angle2: 0 -> 90
+
+
+# Angle2 + Angle3 = -x
+
+# def move_1_3(angle1, angle2, angle3, final_angles):
+#     target_a1, target_a2, target_a3 = final_angles
+#     K = 250
+#     values_a3 = generate_equally_spaced_points(initial_A3, target_a3, K)
+#     values_a1 = generate_equally_spaced_points(initial_A1, target_a1, K)
+#     if float(target_a3) != values_a3[-1]:
+#         values_a3[-1] = target_a3
+#     if float(target_a1) != values_a1[-1]:
+#         values_a1[-1] = target_a1
+#     for i in range(K):
+#         print(f"Rotating to {values_a1[i]} {initial_A2} {values_a3[i]}")
+#         sleep(0.01)
+#         rotate(values_a1[i], initial_A2, values_a3[i])
+#     return values_a1[-1], initial_A2, values_a3[-1]
+
+# 
+# def move_1_2(angle1, angle2, angle3, final_angles):
+#     target_a1, target_a2, target_a3 = final_angles
+#     K = 250
+#     values_a1 = generate_equally_spaced_points(initial_A1, target_a1, K)
+#     values_a2 = generate_equally_spaced_points(initial_A2, target_a2, K)
+#     if float(target_a1) != values_a1[-1]:
+#         values_a1[-1] = target_a1
+#     if float(target_a2) != values_a2[-1]:
+#         values_a2[-1] = target_a2
+#     for i in range(K):
+#         print(f"Rotating to {values_a1[i]} {values_a2[i]} {initial_A3}")
+#         sleep(0.01)
+#         rotate(values_a1[i], values_a2[i], initial_A3)
+#     return values_a1[-1], initial_A2, values_a3[-1]
+# 
+# def move_2_3(angle1, angle2, angle3, final_angles):
+#     target_a1, target_a2, target_a3 = final_angles
+#     K = 250
+#     values_a2 = generate_equally_spaced_points(initial_A2, target_a2, K)
+#     values_a3 = generate_equally_spaced_points(initial_A3, target_a3, K)
+#     if float(target_a3) != values_a3[-1]:
+#         values_a3[-1] = target_a3
+#     if float(target_a2) != values_a2[-1]:
+#         values_a2[-1] = target_a2
+#     for i in range(K):
+#         print(f"Rotating to {initial_A1} {values_a2[i]} {values_a3[i]}")
+#         sleep(0.01)
+#         rotate(initial_A1, values_a2[i], values_a3[i])
+#     return values_a1[-1], initial_A2, values_a3[-1]
+
+# def move_2_3(angle1, angle2, angle3, angles):
+#     target_a1, target_a2, target_a3 = angles
+#     e = 0
+#     while e <= 90:
+#         sleep(0.01)
+#         print(f"Rotating to {angle1} {angle2-e} {angle3+e}")
+#         rotate(angle1, angle2 - e, angle3 + e)
+#         e += 1
+#     return angle1, angle2 - e - 1, angle3 + e - 1
+        
+# def move_1_2(angle1, angle2, angle3, angles):
+#     target_a1, target_a2, target_a3 = angles
+#     e = 0
+#     while e <= target_a3 + 90:
+#         sleep(0.01)
+#         print(f"Rotating to {angle1-e} {angle2+e} {angle3}")
+#         rotate(angle1 - e, angle2 + e, angle3)
+#         e += 1
+#     return angle1 - e - 1, angle2 + e - 1, angle3
+
+
+
